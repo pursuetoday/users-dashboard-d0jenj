@@ -1,0 +1,79 @@
+version: '3.8'
+
+services:
+  # Backend test service with Jest test runner and coverage reporting
+  backend_test:
+    build:
+      context: ./src/backend
+      target: test
+    volumes:
+      - ./src/backend:/app
+      - ./src/backend/jest.config.ts:/app/jest.config.ts
+      - /app/node_modules
+      - ./coverage:/app/coverage
+    environment:
+      - NODE_ENV=test
+      - PORT=3000
+      - DATABASE_URL=postgresql://postgres:postgres@postgres_test:5432/user_management_test
+      - REDIS_URL=redis://redis_test:6379
+      - JWT_SECRET=test_secret
+      - CORS_ORIGIN=*
+      - TEST_COVERAGE_THRESHOLD=80
+    command: npm run test:coverage
+    depends_on:
+      postgres_test:
+        condition: service_healthy
+      redis_test:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    mem_limit: 1g
+    cpu_quota: 50000
+    networks:
+      - test_network
+
+  # PostgreSQL database service for tests with ephemeral storage
+  postgres_test:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_DB=user_management_test
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_HOST_AUTH_METHOD=trust
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    mem_limit: 512m
+    cpu_quota: 25000
+    networks:
+      - test_network
+
+  # Redis cache service for tests with ephemeral storage
+  redis_test:
+    image: redis:7-alpine
+    command: redis-server --save "" --appendonly no
+    tmpfs:
+      - /data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    mem_limit: 256m
+    cpu_quota: 25000
+    networks:
+      - test_network
+
+networks:
+  test_network:
+    driver: bridge
+    internal: true
+    enable_ipv6: false
+    attachable: false

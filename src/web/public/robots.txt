@@ -1,0 +1,29 @@
+# This file defines web crawler access rules for the application
+# Controls which parts of the site should be crawled and indexed
+
+# Apply these rules to all web crawlers
+User-agent: *
+
+# Allow crawlers to index public pages and authentication routes
+Allow: /
+Allow: /login
+Allow: /register
+Allow: /forgot-password
+Allow: /reset-password
+Allow: /terms
+Allow: /privacy
+Allow: /help
+
+# Prevent crawlers from accessing protected routes and sensitive areas
+Disallow: /api/
+Disallow: /auth/
+Disallow: /dashboard/
+Disallow: /settings/
+Disallow: /profile/
+Disallow: /admin/
+Disallow: /users/
+Disallow: /logs/
+Disallow: /system/
+
+# Sitemap location
+Sitemap: https://${DOMAIN}/sitemap.xml

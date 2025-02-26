@@ -1,0 +1,136 @@
+name: Frontend CI
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'src/web/**'
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'src/web/**'
+
+jobs:
+  build_and_test:
+    name: Build and Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: src/web
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0 # Full history for better security auditing
+          
+      - name: Setup Node.js environment
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18.x'
+          cache: 'npm'
+          cache-dependency-path: 'src/web/package-lock.json'
+
+      - name: Cache dependencies and build outputs
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.npm
+            src/web/node_modules
+            src/web/.next/cache
+            ~/.cache/Cypress
+            src/web/.eslintcache
+          key: npm-deps-${{ hashFiles('src/web/package-lock.json') }}
+          restore-keys: |
+            npm-deps-
+
+      - name: Install dependencies
+        run: npm ci --frozen-lockfile
+        env:
+          CI: true
+
+      - name: Security audit
+        run: npm audit --production
+        continue-on-error: true # Don't fail the build but report issues
+
+      - name: Type check with strict mode
+        run: npm run typecheck
+        env:
+          CI: true
+
+      - name: Lint code with ESLint and Prettier
+        run: |
+          npm run lint
+          npx prettier --check "src/**/*.{ts,tsx,css}"
+        env:
+          CI: true
+
+      - name: Run unit and component tests with coverage
+        run: npm run test:coverage
+        env:
+          CI: true
+          NODE_ENV: test
+
+      - name: Verify test coverage meets requirements
+        run: |
+          echo "Checking if coverage meets minimum requirements of 80%"
+          npx vitest coverage report --coverage.lines=80 --coverage.functions=80 --coverage.branches=70 --coverage.statements=80
+        env:
+          CI: true
+
+      - name: Run integration tests
+        run: |
+          npm run test -- --config=vitest.integration.js --coverage=false
+        env:
+          CI: true
+          NODE_ENV: test
+
+      - name: Build application with bundle analysis
+        run: |
+          npm install -D rollup-plugin-visualizer
+          npm run build
+        env:
+          CI: true
+          ANALYZE: true
+
+      - name: Setup Chrome for Lighthouse
+        uses: browser-actions/setup-chrome@latest
+        
+      - name: Run Lighthouse performance checks
+        run: |
+          npm install -g @lhci/cli@0.11.x
+          npm run preview & # Start preview server
+          sleep 5
+          lhci autorun
+        env:
+          LHCI_GITHUB_APP_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          
+      - name: Run accessibility checks
+        run: |
+          npm install -g @axe-core/cli
+          npm run preview & # Use preview server if already running
+          sleep 2
+          axe http://localhost:4173 --exit
+        continue-on-error: true # Report but don't fail the build
+
+      - name: Upload test coverage reports
+        uses: actions/upload-artifact@v3
+        with:
+          name: test-coverage
+          path: src/web/coverage
+          retention-days: 14
+          
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: build-output
+          path: src/web/dist
+          retention-days: 5
+
+      - name: Upload bundle analysis
+        uses: actions/upload-artifact@v3
+        with:
+          name: bundle-analysis
+          path: src/web/stats.html
+          retention-days: 14

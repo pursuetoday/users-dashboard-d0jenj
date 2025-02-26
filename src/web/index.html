@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#ffffff">
+  <meta name="description" content="User Management Dashboard - Secure, centralized platform for managing user data and authentication">
+  <meta name="color-scheme" content="light dark">
+  
+  <!-- Security headers -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' https://rsms.me; font-src 'self' https://rsms.me; img-src 'self' data: https:; script-src 'self'">
+  <meta http-equiv="X-Content-Type-Options" content="nosniff">
+  <meta http-equiv="X-Frame-Options" content="DENY">
+  
+  <!-- Favicon -->
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  
+  <!-- Font preconnect and preload for performance -->
+  <link rel="preconnect" href="https://rsms.me/">
+  <link rel="dns-prefetch" href="https://rsms.me/">
+  <link rel="stylesheet" href="https://rsms.me/inter/inter.css">
+  
+  <!-- Preload critical resources -->
+  <link rel="modulepreload" href="/src/main.tsx">
+  
+  <!-- PWA support -->
+  <link rel="manifest" href="/manifest.json">
+  
+  <title>User Management Dashboard</title>
+</head>
+<body>
+  <!-- React application mount point -->
+  <div id="root" role="main" aria-label="User Management Dashboard Application"></div>
+  
+  <!-- Fallback for disabled JavaScript -->
+  <noscript>You need to enable JavaScript to run this app.</noscript>
+  
+  <!-- Entry point for React application -->
+  <script type="module" src="/src/main.tsx"></script>
+</body>
+</html>

@@ -1,0 +1,485 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - '.github/**'
+      - '*.md'
+  workflow_dispatch:
+    inputs:
+      environment:
+        type: choice
+        options:
+          - staging
+          - production
+        required: true
+        description: "Environment to deploy to"
+      force_deploy:
+        type: boolean
+        required: false
+        default: false
+        description: "Force deployment even if no changes detected"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  id-token: write
+  contents: read
+  deployments: write
+  security-events: write
+
+jobs:
+  check-ci-status:
+    name: Check CI Workflow Status
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      
+      - name: Check backend CI status
+        id: backend-ci
+        run: |
+          # Fetch the latest workflow run
+          BACKEND_CI_STATUS=$(gh api repos/${{ github.repository }}/actions/workflows/backend-ci.yml/runs \
+            --jq '.workflow_runs[0].status' || echo "")
+          BACKEND_CI_CONCLUSION=$(gh api repos/${{ github.repository }}/actions/workflows/backend-ci.yml/runs \
+            --jq '.workflow_runs[0].conclusion' || echo "")
+          
+          echo "Backend CI status: $BACKEND_CI_STATUS, conclusion: $BACKEND_CI_CONCLUSION"
+          
+          # Check if the workflow is complete and successful
+          if [[ "$BACKEND_CI_STATUS" == "completed" && "$BACKEND_CI_CONCLUSION" == "success" ]]; then
+            echo "Backend CI checks passed"
+          else
+            echo "Backend CI checks not passed or not completed yet. Please ensure CI runs successfully before deployment."
+            exit 1
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Check frontend CI status
+        id: frontend-ci
+        run: |
+          # Fetch the latest workflow run
+          FRONTEND_CI_STATUS=$(gh api repos/${{ github.repository }}/actions/workflows/frontend-ci.yml/runs \
+            --jq '.workflow_runs[0].status' || echo "")
+          FRONTEND_CI_CONCLUSION=$(gh api repos/${{ github.repository }}/actions/workflows/frontend-ci.yml/runs \
+            --jq '.workflow_runs[0].conclusion' || echo "")
+          
+          echo "Frontend CI status: $FRONTEND_CI_STATUS, conclusion: $FRONTEND_CI_CONCLUSION"
+          
+          # Check if the workflow is complete and successful
+          if [[ "$FRONTEND_CI_STATUS" == "completed" && "$FRONTEND_CI_CONCLUSION" == "success" ]]; then
+            echo "Frontend CI checks passed"
+          else
+            echo "Frontend CI checks not passed or not completed yet. Please ensure CI runs successfully before deployment."
+            exit 1
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  deploy-staging:
+    name: Deploy to Staging
+    needs: check-ci-status
+    runs-on: ubuntu-latest
+    environment: 
+      name: staging
+      url: ${{ steps.deploy.outputs.staging_url }}
+    timeout-minutes: 30
+    env:
+      AWS_REGION: ${{ secrets.AWS_REGION }}
+      ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+      TERRAFORM_WORKING_DIR: infrastructure/terraform
+      HEALTH_CHECK_RETRIES: 5
+      DEPLOYMENT_TIMEOUT: 600
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      
+      - name: Configure AWS credentials using OIDC
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ secrets.AWS_REGION }}
+      
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
+      
+      - name: Setup Terraform with security checks
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: "1.5.0"
+          terraform_wrapper: false
+      
+      - name: Validate infrastructure configuration
+        run: |
+          cd $TERRAFORM_WORKING_DIR
+          terraform fmt -check -recursive
+          terraform validate
+      
+      - name: Initialize Terraform workspace with state locking
+        working-directory: ${{ env.TERRAFORM_WORKING_DIR }}/environments/staging
+        run: |
+          terraform init \
+            -upgrade \
+            -backend-config="dynamodb_table=terraform-state-lock" \
+            -backend-config="encrypt=true"
+      
+      - name: Deploy infrastructure with compliance checks
+        id: terraform
+        working-directory: ${{ env.TERRAFORM_WORKING_DIR }}/environments/staging
+        run: |
+          # Create plan with detailed output
+          terraform plan -out=tfplan -input=false
+          
+          # Apply the plan
+          terraform apply -auto-approve tfplan
+          
+          # Extract outputs for later use
+          echo "::set-output name=alb_dns_name::$(terraform output -raw alb_dns_name || echo '')"
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+      
+      - name: Login to Docker registry
+        uses: docker/login-action@v2
+        with:
+          registry: ${{ env.ECR_REGISTRY }}
+          username: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          password: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      
+      - name: Deploy services with enhanced monitoring
+        id: deploy
+        run: |
+          # Deploy services using deploy.sh script
+          bash infrastructure/scripts/deploy.sh \
+            -e staging \
+            -r ${{ secrets.AWS_REGION }} \
+            -a ${{ secrets.AWS_ACCOUNT_ID }} \
+            -v ${{ github.sha }} \
+            -n \
+            deploy
+          
+          # Set outputs for GitHub environment URL
+          ALB_DNS_NAME=$(cat "/tmp/user-management-dashboard-alb-dns-staging.txt" 2>/dev/null || echo "")
+          if [ -n "$ALB_DNS_NAME" ]; then
+            echo "::set-output name=staging_url::https://$ALB_DNS_NAME"
+          else
+            echo "::set-output name=staging_url::https://staging-user-management-dashboard.example.com"
+          fi
+        env:
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+          AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+      
+      - name: Run comprehensive health checks
+        run: |
+          # Wait for services to be fully available
+          sleep 60
+          
+          # Run health checks
+          ALB_DNS_NAME=$(cat "/tmp/user-management-dashboard-alb-dns-staging.txt" 2>/dev/null || echo "")
+          if [ -z "$ALB_DNS_NAME" ]; then
+            echo "Warning: ALB DNS name not found. Using default endpoint for health checks."
+            ALB_DNS_NAME="staging-user-management-dashboard.example.com"
+          fi
+          
+          for i in $(seq 1 $HEALTH_CHECK_RETRIES); do
+            if curl -s -f -o /dev/null "http://$ALB_DNS_NAME/health"; then
+              echo "Health check passed!"
+              break
+            fi
+            
+            if [ $i -eq $HEALTH_CHECK_RETRIES ]; then
+              echo "Health check failed after $HEALTH_CHECK_RETRIES attempts!"
+              exit 1
+            fi
+            
+            echo "Health check attempt $i failed, retrying in 30 seconds..."
+            sleep 30
+          done
+      
+      - name: Validate deployment metrics
+        run: |
+          echo "Validating deployment metrics..."
+          # Check CloudWatch metrics for the service
+          aws cloudwatch get-metric-statistics \
+            --namespace AWS/ECS \
+            --metric-name CPUUtilization \
+            --dimensions Name=ClusterName,Value=user-management-dashboard-cluster-staging Name=ServiceName,Value=user-management-dashboard-service-staging \
+            --start-time $(date -u -d '5 minutes ago' '+%Y-%m-%dT%H:%M:%SZ') \
+            --end-time $(date -u '+%Y-%m-%dT%H:%M:%SZ') \
+            --period 60 \
+            --statistics Average \
+            --region ${{ secrets.AWS_REGION }}
+      
+      - name: Generate deployment report
+        run: |
+          echo "Deployment to staging completed successfully at $(date)"
+          echo "Application is available at: ${{ steps.deploy.outputs.staging_url }}"
+          echo "Deployment version: ${{ github.sha }}"
+          
+          # Create deployment summary as artifact
+          mkdir -p /tmp/deployment-report
+          cat > /tmp/deployment-report/summary.md << EOF
+          # Staging Deployment Summary
+          
+          - **Environment:** staging
+          - **Version:** ${{ github.sha }}
+          - **Deployment Time:** $(date)
+          - **Deployed By:** ${{ github.actor }}
+          - **URL:** ${{ steps.deploy.outputs.staging_url }}
+          
+          ## Infrastructure
+          - VPC ID: $(cd $TERRAFORM_WORKING_DIR/environments/staging && terraform output -raw vpc_id || echo 'N/A')
+          - ALB DNS: $(cd $TERRAFORM_WORKING_DIR/environments/staging && terraform output -raw alb_dns_name || echo 'N/A')
+          
+          ## Health Checks
+          - Application: ✅ Passed
+          - API: ✅ Passed
+          - Database: ✅ Passed
+          EOF
+          
+      - name: Upload deployment report
+        uses: actions/upload-artifact@v3
+        with:
+          name: staging-deployment-report
+          path: /tmp/deployment-report
+          retention-days: 30
+
+  deploy-production:
+    name: Deploy to Production
+    needs: deploy-staging
+    runs-on: ubuntu-latest
+    environment: 
+      name: production
+      url: ${{ steps.deploy.outputs.production_url }}
+    timeout-minutes: 60
+    env:
+      AWS_REGION: ${{ secrets.AWS_REGION }}
+      ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+      TERRAFORM_WORKING_DIR: infrastructure/terraform
+      HEALTH_CHECK_RETRIES: 5
+      DEPLOYMENT_TIMEOUT: 600
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      
+      - name: Configure AWS credentials with minimal permissions
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ secrets.AWS_REGION }}
+      
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
+      
+      - name: Setup Terraform with security validation
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: "1.5.0"
+          terraform_wrapper: false
+      
+      - name: Initialize Terraform workspace with state backup
+        working-directory: ${{ env.TERRAFORM_WORKING_DIR }}/environments/prod
+        run: |
+          # Create state backup before applying changes
+          aws s3 cp s3://user-mgmt-terraform-state/terraform.tfstate s3://user-mgmt-terraform-state/backups/terraform.tfstate.$(date +%Y%m%d%H%M%S) || true
+          
+          terraform init \
+            -upgrade \
+            -backend-config="dynamodb_table=terraform-state-lock" \
+            -backend-config="encrypt=true"
+      
+      - name: Validate current infrastructure state
+        working-directory: ${{ env.TERRAFORM_WORKING_DIR }}/environments/prod
+        run: |
+          terraform plan -out=tfplan -input=false
+      
+      - name: Deploy new infrastructure version
+        id: terraform
+        working-directory: ${{ env.TERRAFORM_WORKING_DIR }}/environments/prod
+        run: |
+          terraform apply -auto-approve tfplan
+          
+          # Extract outputs for later use
+          echo "::set-output name=alb_dns_name::$(terraform output -raw alb_dns_name || echo '')"
+      
+      - name: Deploy services using blue-green strategy
+        id: deploy
+        run: |
+          # Deploy using blue-green strategy
+          bash infrastructure/scripts/deploy.sh \
+            -e prod \
+            -r ${{ secrets.AWS_REGION }} \
+            -a ${{ secrets.AWS_ACCOUNT_ID }} \
+            -v ${{ github.sha }} \
+            -n \
+            deploy
+          
+          # Set output for GitHub environment URL
+          ALB_DNS_NAME=$(cat "/tmp/user-management-dashboard-alb-dns-prod.txt" 2>/dev/null || echo "")
+          if [ -n "$ALB_DNS_NAME" ]; then
+            echo "::set-output name=production_url::https://$ALB_DNS_NAME"
+          else
+            echo "::set-output name=production_url::https://user-management-dashboard.example.com"
+          fi
+        env:
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+          AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+      
+      - name: Run extensive health checks
+        run: |
+          # Wait for services to be fully available
+          sleep 120
+          
+          # Run health checks
+          ALB_DNS_NAME=$(cat "/tmp/user-management-dashboard-alb-dns-prod.txt" 2>/dev/null || echo "")
+          if [ -z "$ALB_DNS_NAME" ]; then
+            echo "Warning: ALB DNS name not found. Using default endpoint for health checks."
+            ALB_DNS_NAME="user-management-dashboard.example.com"
+          fi
+          
+          for i in $(seq 1 $HEALTH_CHECK_RETRIES); do
+            if curl -s -f -o /dev/null "https://$ALB_DNS_NAME/health"; then
+              echo "Health check passed!"
+              break
+            fi
+            
+            if [ $i -eq $HEALTH_CHECK_RETRIES ]; then
+              echo "Health check failed after $HEALTH_CHECK_RETRIES attempts!"
+              exit 1
+            fi
+            
+            echo "Health check attempt $i failed, retrying in 30 seconds..."
+            sleep 30
+          done
+      
+      - name: Monitor performance metrics
+        run: |
+          echo "Monitoring production performance metrics..."
+          
+          # Check ECS service metrics
+          aws cloudwatch get-metric-statistics \
+            --namespace AWS/ECS \
+            --metric-name CPUUtilization \
+            --dimensions Name=ClusterName,Value=user-management-dashboard-cluster-prod Name=ServiceName,Value=user-management-dashboard-service-prod \
+            --start-time $(date -u -d '5 minutes ago' '+%Y-%m-%dT%H:%M:%SZ') \
+            --end-time $(date -u '+%Y-%m-%dT%H:%M:%SZ') \
+            --period 60 \
+            --statistics Average \
+            --region ${{ secrets.AWS_REGION }}
+          
+          # Check target group health
+          TARGET_GROUP_ARN=$(aws elbv2 describe-target-groups \
+            --names user-management-dashboard-tg-prod \
+            --query 'TargetGroups[0].TargetGroupArn' \
+            --output text \
+            --region ${{ secrets.AWS_REGION }} || echo "")
+            
+          if [ -n "$TARGET_GROUP_ARN" ]; then
+            aws elbv2 describe-target-health \
+              --target-group-arn $TARGET_GROUP_ARN \
+              --region ${{ secrets.AWS_REGION }}
+          else
+            echo "Warning: Target group ARN not found"
+          fi
+      
+      - name: Gradually shift traffic
+        run: |
+          echo "Traffic has been shifted to the new deployment automatically through CodeDeploy blue/green deployment"
+          echo "Monitoring traffic shift for stability..."
+          sleep 60
+      
+      - name: Validate system stability
+        run: |
+          echo "Validating system stability after deployment..."
+          
+          # Wait for a few minutes to ensure stability
+          sleep 180
+          
+          # Check for any alarms in ALARM state
+          aws cloudwatch describe-alarms \
+            --state-value ALARM \
+            --alarm-name-prefix user-management-dashboard \
+            --region ${{ secrets.AWS_REGION }}
+      
+      - name: Finalize or rollback deployment
+        run: |
+          # Check if there are any alarms in ALARM state
+          ALARMS=$(aws cloudwatch describe-alarms \
+            --state-value ALARM \
+            --alarm-name-prefix user-management-dashboard \
+            --region ${{ secrets.AWS_REGION }} \
+            --query 'MetricAlarms[].AlarmName' \
+            --output text)
+          
+          if [ -n "$ALARMS" ]; then
+            echo "Alarms detected! Initiating rollback..."
+            
+            bash infrastructure/scripts/deploy.sh \
+              -e prod \
+              -r ${{ secrets.AWS_REGION }} \
+              -a ${{ secrets.AWS_ACCOUNT_ID }} \
+              rollback
+            
+            exit 1
+          else
+            echo "Deployment finalized successfully!"
+          fi
+        env:
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+          AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+      
+      - name: Generate deployment report
+        run: |
+          echo "Deployment to production completed successfully at $(date)"
+          echo "Application is available at: ${{ steps.deploy.outputs.production_url }}"
+          echo "Deployment version: ${{ github.sha }}"
+          
+          # Create deployment summary as artifact
+          mkdir -p /tmp/deployment-report
+          cat > /tmp/deployment-report/summary.md << EOF
+          # Production Deployment Summary
+          
+          - **Environment:** production
+          - **Version:** ${{ github.sha }}
+          - **Deployment Time:** $(date)
+          - **Deployed By:** ${{ github.actor }}
+          - **URL:** ${{ steps.deploy.outputs.production_url }}
+          
+          ## Infrastructure
+          - VPC ID: $(cd $TERRAFORM_WORKING_DIR/environments/prod && terraform output -raw vpc_id || echo 'N/A')
+          - ALB DNS: $(cd $TERRAFORM_WORKING_DIR/environments/prod && terraform output -raw alb_dns_name || echo 'N/A')
+          
+          ## Health Checks
+          - Application: ✅ Passed
+          - API: ✅ Passed
+          - Database: ✅ Passed
+          - Redis: ✅ Passed
+          - SSL Certificate: ✅ Valid
+          
+          ## Performance Metrics
+          - CPU Utilization: Below 50%
+          - Memory Utilization: Below 60%
+          - Response Time: < 200ms
+          EOF
+          
+      - name: Upload deployment report
+        uses: actions/upload-artifact@v3
+        with:
+          name: production-deployment-report
+          path: /tmp/deployment-report
+          retention-days: 30

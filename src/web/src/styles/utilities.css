@@ -1,0 +1,231 @@
+/**
+ * Custom utility classes for User Management Dashboard
+ * Extends Tailwind's default utilities with project-specific functionality
+ * @tailwindcss v3.x
+ */
+
+/* Import Tailwind utilities for extension */
+@import './tailwind.css';
+
+/* Add to Tailwind's utilities layer */
+@tailwind utilities;
+
+@layer utilities {
+  /* Layout Utilities - Enhanced container and layout options */
+  .container-fluid {
+    @apply w-full max-w-none px-4 sm:px-6 lg:px-8;
+  }
+
+  .content-wrapper {
+    @apply py-6 sm:py-8 lg:py-12;
+  }
+
+  .grid-auto-fit {
+    @apply grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4;
+  }
+
+  /* Table layout utilities */
+  .table-fixed-layout {
+    table-layout: fixed;
+  }
+
+  .table-sticky-header {
+    @apply sticky top-0 z-10;
+  }
+
+  /* Typography Utilities - Enhanced text styling and layout */
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  .truncate-2 {
+    @apply line-clamp-2;
+  }
+
+  .heading-1 {
+    @apply text-4xl font-bold tracking-tight;
+  }
+
+  .heading-2 {
+    @apply text-3xl font-semibold tracking-tight;
+  }
+
+  .heading-3 {
+    @apply text-2xl font-semibold tracking-tight;
+  }
+
+  .heading-4 {
+    @apply text-xl font-medium tracking-tight;
+  }
+
+  .body-lg {
+    @apply text-lg leading-relaxed;
+  }
+
+  .body-md {
+    @apply text-base leading-relaxed;
+  }
+
+  .body-sm {
+    @apply text-sm leading-relaxed;
+  }
+
+  .caption {
+    @apply text-xs leading-normal;
+  }
+
+  /* Interaction Utilities - Enhanced user experience */
+  .clickable {
+    @apply cursor-pointer hover:opacity-80 transition-opacity;
+  }
+
+  .focus-ring {
+    @apply focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2;
+  }
+
+  .disabled {
+    @apply opacity-50 cursor-not-allowed pointer-events-none;
+  }
+
+  .touch-target {
+    @apply min-h-[44px] min-w-[44px]; /* WCAG minimum touch target size */
+  }
+
+  .no-tap-highlight {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .prevent-select {
+    @apply select-none;
+  }
+
+  /* Accessibility Utilities - WCAG 2.1 AA compliance */
+  .sr-only-focusable {
+    @apply sr-only focus:not-sr-only focus:fixed focus:p-4;
+  }
+
+  .reduced-motion {
+    @apply motion-reduce:transform-none motion-reduce:transition-none;
+  }
+
+  .high-contrast {
+    @apply contrast-more:border-slate-900 contrast-more:text-slate-900;
+  }
+
+  .focus-visible-only {
+    @apply focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2;
+  }
+
+  .keyboard-only {
+    @apply hidden focus-within:block;
+  }
+
+  /* Reading order utilities */
+  .reading-order-1 {
+    order: 1;
+  }
+
+  .reading-order-2 {
+    order: 2;
+  }
+
+  /* Theme Utilities - Consistent theme application */
+  .theme-transition {
+    @apply transition-colors duration-200;
+  }
+
+  .dark-mode-text {
+    @apply text-gray-900 dark:text-gray-100;
+  }
+
+  .dark-mode-bg {
+    @apply bg-white dark:bg-gray-900;
+  }
+
+  .dark-mode-border {
+    @apply border-gray-200 dark:border-gray-700;
+  }
+
+  .dark-mode-shadow {
+    @apply shadow dark:shadow-gray-800;
+  }
+
+  /* Interactive states with theme awareness */
+  .hover-highlight {
+    @apply hover:bg-gray-50 dark:hover:bg-gray-800;
+  }
+
+  .active-highlight {
+    @apply active:bg-gray-100 dark:active:bg-gray-700;
+  }
+
+  /* Print utilities */
+  .print-only {
+    @apply hidden print:block;
+  }
+
+  .no-print {
+    @apply print:hidden;
+  }
+
+  /* Status indicators with enhanced contrast */
+  .status-indicator {
+    @apply relative pl-6;
+  }
+  
+  .status-indicator::before {
+    @apply absolute left-0 top-1/2 -translate-y-1/2 w-4 h-4 rounded-full;
+    content: '';
+  }
+  
+  .status-indicator-active::before {
+    @apply bg-green-500 dark:bg-green-400;
+  }
+  
+  .status-indicator-inactive::before {
+    @apply bg-red-500 dark:bg-red-400;
+  }
+  
+  .status-indicator-pending::before {
+    @apply bg-yellow-500 dark:bg-yellow-400;
+  }
+
+  /* Animation utilities */
+  .fade-in {
+    animation: fadeIn 0.3s ease-in-out;
+  }
+  
+  .slide-in-right {
+    animation: slideInRight 0.3s ease-in-out;
+  }
+  
+  .slide-in-left {
+    animation: slideInLeft 0.3s ease-in-out;
+  }
+  
+  .bounce-in {
+    animation: bounceIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  }
+
+  /* Animation keyframes */
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  
+  @keyframes slideInRight {
+    from { transform: translateX(100%); }
+    to { transform: translateX(0); }
+  }
+  
+  @keyframes slideInLeft {
+    from { transform: translateX(-100%); }
+    to { transform: translateX(0); }
+  }
+  
+  @keyframes bounceIn {
+    0% { transform: scale(0.8); opacity: 0; }
+    50% { transform: scale(1.05); }
+    100% { transform: scale(1); opacity: 1; }
+  }
+}

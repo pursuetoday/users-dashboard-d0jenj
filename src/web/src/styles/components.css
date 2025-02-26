@@ -1,0 +1,175 @@
+/**
+ * Component-specific styles for the User Management Dashboard
+ * Extends Tailwind UI's base components with enhanced accessibility, dark mode support,
+ * and responsive design considerations
+ * 
+ * @tailwindcss v3.x
+ * @headlessui/react v1.7.x
+ */
+
+/* Build upon Tailwind components */
+@tailwind components;
+
+/* Button Components
+ * Enhanced button component styles with multiple variants, states, and accessibility features 
+ */
+@layer components {
+  /* Primary action buttons */
+  .btn-primary {
+    @apply bg-primary-600 text-white hover:bg-primary-700 focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200 ease-in-out;
+  }
+
+  /* Secondary action buttons */
+  .btn-secondary {
+    @apply bg-gray-100 text-gray-900 hover:bg-gray-200 focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed dark:bg-gray-700 dark:text-gray-100 dark:hover:bg-gray-600 transition-colors duration-200 ease-in-out;
+  }
+
+  /* Danger/destructive action buttons */
+  .btn-danger {
+    @apply bg-red-600 text-white hover:bg-red-700 focus:ring-2 focus:ring-red-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200 ease-in-out;
+  }
+
+  /* Icon buttons for compact actions */
+  .btn-icon {
+    @apply p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 transition-colors duration-200 ease-in-out;
+  }
+}
+
+/* Form Components
+ * Form element styles with enhanced validation states and accessibility features
+ */
+@layer components {
+  /* Text input fields */
+  .form-input {
+    @apply block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100 transition-colors duration-200 ease-in-out;
+  }
+
+  /* Select dropdown fields */
+  .form-select {
+    @apply block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100 transition-colors duration-200 ease-in-out;
+  }
+
+  /* Checkbox fields */
+  .form-checkbox {
+    @apply rounded border-gray-300 text-primary-600 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-700 transition-colors duration-200 ease-in-out;
+  }
+
+  /* Validation error messages */
+  .form-error {
+    @apply text-sm text-red-600 dark:text-red-400 mt-1 animate-fade-in;
+  }
+  
+  /* Form field labels */
+  .form-label {
+    @apply block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1;
+  }
+}
+
+/* Table Components
+ * Responsive data table component styles with enhanced mobile support
+ */
+@layer components {
+  /* Container for tables with horizontal scrolling on small screens */
+  .table-container {
+    @apply overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm;
+  }
+
+  /* Table header row that sticks to the top when scrolling */
+  .table-header {
+    @apply bg-gray-50 dark:bg-gray-800 sticky top-0 z-10 transition-colors duration-200 ease-in-out;
+  }
+
+  /* Table cell styling */
+  .table-cell {
+    @apply px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-200 transition-colors duration-200 ease-in-out;
+  }
+
+  /* Table row with hover effect */
+  .table-row {
+    @apply hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors duration-200 ease-in-out;
+  }
+
+  /* Responsive table adjustments for mobile */
+  @media (max-width: 640px) {
+    .table-responsive {
+      @apply block;
+    }
+    .table-cell {
+      @apply block w-full;
+    }
+  }
+}
+
+/* Modal Components
+ * Modal and dialog component styles with enhanced animations and accessibility
+ */
+@layer components {
+  /* Backdrop overlay */
+  .modal-overlay {
+    @apply fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity duration-300 ease-in-out backdrop-blur-sm;
+  }
+
+  /* Modal container for centered positioning */
+  .modal-container {
+    @apply fixed inset-0 z-10 overflow-y-auto flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0;
+  }
+
+  /* Modal content box */
+  .modal-content {
+    @apply relative transform overflow-hidden rounded-lg bg-white dark:bg-gray-800 px-4 pb-4 pt-5 text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-lg sm:p-6;
+  }
+
+  /* Close button for modals */
+  .modal-close-button {
+    @apply absolute right-4 top-4 text-gray-400 hover:text-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 transition-colors duration-200 ease-in-out;
+  }
+}
+
+/* Card Components
+ * Card component styles with responsive layout and dark mode support
+ */
+@layer components {
+  /* Base card container */
+  .card {
+    @apply rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-sm transition-colors duration-200 ease-in-out;
+  }
+
+  /* Card header section */
+  .card-header {
+    @apply px-6 py-4 border-b border-gray-200 dark:border-gray-700 transition-colors duration-200 ease-in-out;
+  }
+
+  /* Card body section */
+  .card-body {
+    @apply px-6 py-4 transition-colors duration-200 ease-in-out;
+  }
+
+  /* Card footer section */
+  .card-footer {
+    @apply px-6 py-4 border-t border-gray-200 dark:border-gray-700 transition-colors duration-200 ease-in-out;
+  }
+}
+
+/* Accessibility Enhancements */
+@layer utilities {
+  /* Enhanced focus styles for keyboard navigation */
+  .focus-visible {
+    @apply focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 transition-shadow duration-200 ease-in-out;
+  }
+
+  /* Screen reader only utilities with enhanced support */
+  .sr-only {
+    @apply absolute w-px h-px p-0 -m-px overflow-hidden whitespace-nowrap border-0;
+  }
+
+  .sr-only-focusable {
+    @apply absolute w-px h-px p-0 -m-px overflow-hidden whitespace-nowrap border-0 focus:not-sr-only;
+  }
+
+  /* Styles for users who prefer reduced motion */
+  @media (prefers-reduced-motion: reduce) {
+    * {
+      @apply transition-none animate-none;
+    }
+  }
+}

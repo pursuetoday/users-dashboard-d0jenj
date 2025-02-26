@@ -1,0 +1,1 @@
+Create me a dashboard app that offers authentication, and once you are registered , you can see list of all the users there in table. it allows you to edit any user. use tailwin UI and react.js

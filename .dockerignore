@@ -1,0 +1,33 @@
+node_modules
+npm-debug.log
+
+# Version control
+.git
+
+# Environment files (potential secrets)
+.env
+.env.*
+
+# Documentation
+*.md
+
+# Test files
+*.test.ts
+*.test.tsx
+tests/
+coverage/
+
+# IDE configurations
+.vscode/
+.idea/
+
+# Build artifacts
+dist/
+build/
+
+# CI/CD
+.github/
+infrastructure/
+
+# Logs
+*.log
